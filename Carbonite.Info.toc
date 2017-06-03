@@ -1,0 +1,12 @@
+## Interface: 70200
+## Title: Carbonite Info 7.2.0
+## Version: 7.2.0
+## Author: No One
+## Notes: Released Under GPL
+## DefaultState: Enabled
+## LoadOnDemand: 0
+## SavedVariables: NXInfo
+## RequiredDeps: Carbonite
+
+Locales\locales.xml
+NxInfo.lua
