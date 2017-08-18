@@ -28,6 +28,7 @@ local L = LibStub("AceLocale-3.0"):GetLocale("Carbonite.Info", true)
 Nx.VERSIONINFO			= .24				-- Info win data
 Nx.Info = {}
 Nx.InfoStats = {}
+Nx.Info.Combat = {}
 
 local defaults = {
 	profile = {
@@ -154,13 +155,21 @@ function CarboniteInfo:OnInitialize()
 	Nx.idb = LibStub("AceDB-3.0"):New("NXInfo",defaults, true)
 	Nx.Font:ModuleAdd("Info.InfoFont",{ "NxFontI", "GameFontNormal","idb" })
 	Nx.Info:Init()
+	Nx.Info.Combat:Init()
+	Nx.Info.Combat:Open()
 	CarboniteInfo:PLAYER_LOGIN()
 	local function func ()
 		Nx.Info:ToggleShow()
 	end
 	Nx.NXMiniMapBut.Menu:AddItem(0, L["Show Info Windows"], func, Nx.NXMiniMapBut)
+	local function func ()
+		Nx.Info.Combat:Open()
+	end
+	Nx.NXMiniMapBut.Menu:AddItem(0, L["Show Combat Graph"], func, Nx.NXMiniMapBut)
 	CarboniteInfo:RegisterEvent("PLAYER_LOGIN")
+	CarboniteInfo:RegisterComm("carbmodule",Nx.Info.OnChat_msg_addon)
 	tinsert(Nx.BrokerMenuTemplate,{ text = L["Toggle Info Windows"], func = function() Nx.Info:ToggleShow()end })
+	tinsert(Nx.BrokerMenuTemplate,{ text = L["Toggle Combat Graph"], func = function() Nx.Info.Combat:Open() end })
 end
 
 function CarboniteInfo:PLAYER_LOGIN()
@@ -264,6 +273,34 @@ function Nx.Info:Init()
 	self:CreateMenu()
 	Nx:AddToConfig("Info Module",createOptions(),L["Info Module"])		
 	self:OptionsUpdate()
+end
+
+function Nx.Info.Combat:Init()
+
+	self.KBs = 0
+	self.Deaths = 0
+	self.HKs = 0
+	self.Honor = 0
+	self.DamDone = 0
+	self.HealDone = 0
+
+	self.Frm = nil
+	self.HitPeak = 1
+	self.HitTotal = 0
+	self.HitBest = 0
+	self.W = 400
+	self.H = 80
+	self.InCombat = false
+	self.AttackerName = "?"
+end
+
+function Nx.Info:OnChat_msg_addon(msg, dist, target)
+	local ssplit = { strsplit("|",msg) }
+	if ssplit[1] == "CMD" then
+		if ssplit[2] == "c" then
+			Nx.Info.Combat:Open()
+		end
+	end
 end
 
 ---------------------------------------------------------------------------------------
@@ -1426,5 +1463,263 @@ function Nx:OnChat_msg_bg_system_neutral (event, arg1, arg2, arg3)
 	end
 end
 
+function Nx.Info.Combat:Open()
+
+	local win = self.Win
+
+	if win then
+		if win:IsShown() then
+			win:Show (false)
+		else
+			win:Show()
+		end
+		return
+	end
+
+
+	self.EventTable = {
+	}
+
+	local win = Nx.Window:Create ("NxCombat", nil, nil, nil, nil, nil, true)
+	self.Win = win
+
+	win:InitLayoutData (nil, -.7, -.7, -.3, -.06)
+
+	win:CreateButtons (true)
+
+	-- Create frame
+
+	local f = CreateFrame ("Frame", nil, UIParent)
+	self.Frm = f
+	f.NxCombat = self
+
+	win:Attach (f, 0, 1, 0, 1)
+
+	f:SetScript ("OnEvent", self.OnEvent)
+
+	f:RegisterEvent ("COMBAT_LOG_EVENT_UNFILTERED")
+	f:RegisterEvent ("CHAT_MSG_COMBAT_XP_GAIN")
+	f:RegisterEvent ("CHAT_MSG_COMBAT_HONOR_GAIN")
+	f:RegisterEvent ("CHAT_MSG_LOOT")
+	f:RegisterEvent ("PLAYER_REGEN_DISABLED")
+	f:RegisterEvent ("PLAYER_REGEN_ENABLED")
+
+	for k, v in pairs (self.EventTable) do
+		f:RegisterEvent (k)
+	end
+
+	f:RegisterEvent ("PLAYER_DEAD")
+
+	f:SetScript ("OnUpdate", self.OnUpdate)
+
+	f:SetScript ("OnEnter", self.OnEnter)
+	f:SetScript ("OnLeave", self.OnEnter)
+	f:EnableMouse (true)
+
+	f:SetFrameStrata ("MEDIUM")
+
+	local t = f:CreateTexture()
+	t:SetColorTexture (.2, .2, .2, .5)
+	t:SetAllPoints (f)
+	f.texture = t
+
+	self:OpenGraph()
+end
+
+function Nx.Info.Combat:OpenGraph()
+	self.GraphHits = Nx.Graph:Create (self.W, 50, self.Frm)
+	local f = self.GraphHits.MainFrm
+	self.Win:Attach (f, 0, 1, 0, 1)
+end
+
+--------
+
+function Nx.Info.Combat:OnEvent (event, ...)
+
+	local arg1, arg2, arg3 = select (1, ...)
+
+	local Combat = Nx.Info.Combat
+	local UEvents = Nx.UEvents
+	local prtD = Nx.prtD
+	if event == "COMBAT_LOG_EVENT_UNFILTERED" then
+
+		local OBJ_AFFILIATION_MINE = 1
+		local OBJ_TYPE_PET			= 0x00001000
+		local OBJ_TYPE_GUARDIAN		= 0x00002000
+
+		local time, cEvent, _hideCaster, sId, sName, sFlags, sf2, dId, dName, dFlags, df2, a1, a2, a3, a4 = select (1, ...)
+		local pre, mid, post = Nx.Split ("_", cEvent)
+		if not post then
+			post = mid
+		end
+
+		if bit.band (sFlags, OBJ_AFFILIATION_MINE) > 0 then
+
+			local spellId, spellName, spellSchool
+			local i = 12
+
+			if pre ~= "SWING" then
+				spellId, spellName, spellSchool = select (12, ...)
+				i = 15
+			end
+
+			local amount, school, resist, block, absorb, crit = select (i, ...)
+
+			if post == "DAMAGE" then
+
+				local v = amount
+
+				local hitStr = crit and "|cffff00ff" .. L["crit"] or L["hit"]
+
+				if spellName then
+					hitStr = spellName
+					if mid == "PERIODIC" then
+						hitStr = spellName .. " dot"
+					end
+					if crit then
+						hitStr = hitStr .. " |cffff00ff" .. L["crit"]
+					end
+				end
+				local s = format ("|cff00ff00%s|r %s |cffff0000'%s'|r %d", sName or "?", hitStr, dName, amount)
+
+				if bit.band (sFlags, OBJ_TYPE_PET + OBJ_TYPE_GUARDIAN) > 0 then
+					if pre == "SPELL" then
+						if crit then
+							Combat:SetLine (v, "e0a000", s)
+						else
+							Combat:SetLine (v, "906000", s)
+						end
+					else
+						if crit then
+							Combat:SetLine (v, "e0a0a0", s)
+						else
+							Combat:SetLine (v, "806060", s)
+						end
+					end
+				else
+					if pre == "SPELL" then
+						if crit then
+							Combat:SetLine (v, "e0e000", s)
+						else
+							Combat:SetLine (v, "909000", s)
+						end
+					else
+						if crit then
+							Combat:SetLine (v, "e0e0e0", s)
+						else
+							Combat:SetLine (v, "808080", s)
+						end
+					end
+				end
+
+			elseif cEvent == "PARTY_KILL" then
+
+				Combat:SetLine (-1, "e02020", L["Killed"] .. " " .. dName)
+				UEvents:AddKill (dName)
+			end
+
+		elseif bit.band (dFlags, OBJ_AFFILIATION_MINE) > 0 then
+
+			if post == "DAMAGE" and sName then
+				Combat.AttackerName = sName
+			end
+		end
+	elseif event == "CHAT_MSG_COMBAT_XP_GAIN" then
+		local s1, s2, name = strfind (arg1, "gain (%d+) ex")
+		if s1 then
+			Combat:SetLine (-1, "20e020", arg1)
+			UEvents:AddInfo ("+"..name.." xp")
+		end
+	elseif event == "CHAT_MSG_COMBAT_HONOR_GAIN" then
+		local s1, s2, val = strfind (arg1, "(%d*%.%d+) %aonor")	--V4
+		if s1 then
+			UEvents:AddHonor ("+".. val .." " .. L["honor"])
+			return
+		end
+
+		local s1, s2, name = strfind (arg1, "(%d+) %aonor")
+		if s1 and name ~= "0" then
+			UEvents:AddHonor ("+"..name.." " .. L["honor"])
+		end
+
+	elseif event == "CHAT_MSG_LOOT" then
+		local s1, s2 = strfind (arg1, "Honor Points%.")	--V4
+		if s1 then
+			UEvents:AddHonor ("+1 " .. L["honor"])
+			return
+		end
+
+		local s1, s2, val = strfind (arg1, "Honor Points x(%d+)")	--V4
+		if s1 then
+			UEvents:AddHonor ("+" .. val .. " " .. L["honor"])
+			return
+		end
+
+	elseif event == "PLAYER_REGEN_DISABLED" then
+		Combat:EnterCombat()
+
+	elseif event == "PLAYER_REGEN_ENABLED" then
+		Combat.InCombat = false
+
+	elseif event == "PLAYER_DEAD" then
+		UEvents:AddDeath (Combat.AttackerName)
+
+	else
+		if Combat.EventTable[event] then
+			Combat.EventTable[event] (Combat, arg1)
+		end
+
+	end
+end
+
+function Nx.Info.Combat:OnUpdate (...)
+
+end
+
+function Nx.Info.Combat:OnEnter (motion)
+
+end
+
+--------
+-- Start combat
+
+function Nx.Info.Combat:EnterCombat (value)
+
+	if not self.InCombat then
+		self.InCombat = true
+		self.HitPeak = 10
+		self.HitTotal = 0
+		self.TimeStart = GetTime()
+
+		self.GraphHits:Clear()
+		self.GraphHits:SetPeak (self.HitPeak)
+	end
+end
+
+--------
+-- Set a new graph line to value
+
+function Nx.Info.Combat:SetLine (value, colorStr, infoStr)
+
+	self:EnterCombat()
+
+	if value > self.HitPeak then
+		self.HitPeak = value
+		self.GraphHits:SetPeak (self.HitPeak)
+	end
+
+	self.HitTotal = self.HitTotal + value
+
+	if value > self.HitBest then
+		self.HitBest = value
+	end
+
+	local time = GetTime() - self.TimeStart + .001		-- Dont allow zero
+
+	self.GraphHits:SetLine (time, value, colorStr, infoStr)
+
+	local txt = string.format (L["Hit"] .. " %3.0f " .. L["Peak"] .. " "..self.HitPeak.." " .. L["Best"] .. " "..self.HitBest.." " .. L["Total"] .. " %.0f " .. L["Time"] .. " %.2f DPS %.1f", value, self.HitTotal, time, self.HitTotal / time)
+	self.Win:SetTitle (txt)
+end
 ---------------------------------------------------------------------------------------
 -- EOF
