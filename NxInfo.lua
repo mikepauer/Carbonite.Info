@@ -22,7 +22,7 @@
 
 ---------------------------------------------------------------------------------------
 
-CarboniteInfo = LibStub("AceAddon-3.0"):NewAddon("Carbonite.Info","AceEvent-3.0", "AceComm-3.0")
+CarboniteInfo = LibStub("AceAddon-3.0"):NewAddon("Carbonite.Info", "AceEvent-3.0", "AceComm-3.0")
 local L = LibStub("AceLocale-3.0"):GetLocale("Carbonite.Info", true)
 
 Nx.VERSIONINFO			= .24				-- Info win data
