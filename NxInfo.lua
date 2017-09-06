@@ -276,14 +276,6 @@ function Nx.Info:Init()
 end
 
 function Nx.Info.Combat:Init()
-
-	self.KBs = 0
-	self.Deaths = 0
-	self.HKs = 0
-	self.Honor = 0
-	self.DamDone = 0
-	self.HealDone = 0
-
 	self.Frm = nil
 	self.HitPeak = 1
 	self.HitTotal = 0
