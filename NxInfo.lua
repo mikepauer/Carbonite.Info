@@ -1539,7 +1539,7 @@ function Nx.Info.Combat:OnEvent (event, ...)
 		local OBJ_TYPE_PET			= 0x00001000
 		local OBJ_TYPE_GUARDIAN		= 0x00002000
 
-		local time, cEvent, _hideCaster, sId, sName, sFlags, sf2, dId, dName, dFlags, df2, a1, a2, a3, a4 = select (1, ...)
+		local time, cEvent, _hideCaster, sId, sName, sFlags, sf2, dId, dName, dFlags, df2, a1, a2, a3, a4 = select (1, unpack({CombatLogGetCurrentEventInfo()}))
 		local pre, mid, post = Nx.Split ("_", cEvent)
 		if not post then
 			post = mid
@@ -1551,11 +1551,11 @@ function Nx.Info.Combat:OnEvent (event, ...)
 			local i = 12
 
 			if pre ~= "SWING" then
-				spellId, spellName, spellSchool = select (12, ...)
+				spellId, spellName, spellSchool = select (12, unpack({CombatLogGetCurrentEventInfo()}))
 				i = 15
 			end
 
-			local amount, school, resist, block, absorb, crit = select (i, ...)
+			local amount, school, resist, block, absorb, crit = select (i, unpack({CombatLogGetCurrentEventInfo()}))
 
 			if post == "DAMAGE" then
 
