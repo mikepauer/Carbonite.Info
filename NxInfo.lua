@@ -369,10 +369,10 @@ function Nx.Info:OptionsUpdate()
 			end
 			info.List:Lock (lock)
 			local arr = { strsplit("|",Nx.idb.profile.Info.ListCol) }
-			local cr = arr[1]
-			local cg = arr[2]
-			local cb = arr[3]
-			local ca = arr[4]
+			local cr = tonumber(arr[1])
+			local cg = tonumber(arr[2])
+			local cb = tonumber(arr[3])
+			local ca = tonumber(arr[4])
 			info.List:SetBGColor (cr, cg, cb, ca, true)
 		end
 	end
