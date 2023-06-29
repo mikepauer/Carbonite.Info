@@ -76,7 +76,7 @@ local function createOptions()
 						local g = arr[2]
 						local b = arr[3]
 						local a = arr[4]
-						return r,g,b,a
+						return r,g,b,tonumber(a)
 					end,
 					set = function(_,r,g,b,a)
 						Nx.idb.profile.Info.ListCol = r .. "|" .. g .. "|" .. b .. "|" .. a
